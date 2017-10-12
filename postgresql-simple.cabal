@@ -94,42 +94,42 @@ source-repository this
   location: http://github.com/lpsmith/postgresql-simple
   tag:      v0.5.3.0
 
-test-suite test
-  type:           exitcode-stdio-1.0
+-- test-suite test
+--   type:           exitcode-stdio-1.0
 
-  hs-source-dirs: test
-  main-is:        Main.hs
-  other-modules:
-    Common
-    Notify
-    Serializable
-    Time
+--   hs-source-dirs: test
+--   main-is:        Main.hs
+--   other-modules:
+--     Common
+--     Notify
+--     Serializable
+--     Time
 
-  ghc-options: -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind
+--   ghc-options: -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind
 
-  extensions: NamedFieldPuns
-            , OverloadedStrings
-            , Rank2Types
-            , RecordWildCards
-            , PatternGuards
-            , ScopedTypeVariables
+--   extensions: NamedFieldPuns
+--             , OverloadedStrings
+--             , Rank2Types
+--             , RecordWildCards
+--             , PatternGuards
+--             , ScopedTypeVariables
 
-  build-depends: base
-               , aeson
-               , base16-bytestring
-               , bytestring
-               , containers
-               , cryptohash
-               , filepath
-               , tasty
-               , tasty-hunit
-               , tasty-golden
-               , HUnit
-               , postgresql-simple
-               , text
-               , time
-               , vector
+--   build-depends: base
+--                , aeson
+--                , base16-bytestring
+--                , bytestring
+--                , containers
+--                , cryptohash
+--                , filepath
+--                , tasty
+--                , tasty-hunit
+--                , tasty-golden
+--                , HUnit
+--                , postgresql-simple
+--                , text
+--                , time
+--                , vector
 
-  if !impl(ghc >= 7.6)
-    build-depends:
-      ghc-prim
+--   if !impl(ghc >= 7.6)
+--     build-depends:
+--       ghc-prim
