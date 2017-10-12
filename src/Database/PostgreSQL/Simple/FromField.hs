@@ -1,7 +1,12 @@
-{-# LANGUAGE CPP, DeriveDataTypeable, DeriveFunctor  #-}
-{-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
-{-# LANGUAGE PatternGuards, ScopedTypeVariables      #-}
-{-# LANGUAGE RecordWildCards, TemplateHaskell        #-}
+{-# LANGUAGE CPP                  #-}
+{-# LANGUAGE DeriveDataTypeable   #-}
+{-# LANGUAGE DeriveFunctor        #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE PatternGuards        #-}
+{-# LANGUAGE RecordWildCards      #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 {- |
 Module:      Database.PostgreSQL.Simple.FromField
@@ -113,65 +118,70 @@ module Database.PostgreSQL.Simple.FromField
 
 #include "MachDeps.h"
 
-import           Control.Applicative ( (<|>), (<$>), pure, (*>), (<*) )
-import           Control.Concurrent.MVar (MVar, newMVar)
-import           Control.Exception (Exception)
-import qualified Data.Aeson as JSON
-import qualified Data.Aeson.Parser as JSON (value')
-import           Data.Attoparsec.ByteString.Char8 hiding (Result)
-import           Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as B
-import           Data.Int (Int16, Int32, Int64)
-import           Data.IORef (IORef, newIORef)
-import           Data.Ratio (Ratio)
-import           Data.Time ( UTCTime, ZonedTime, LocalTime, Day, TimeOfDay )
-import           Data.Typeable (Typeable, typeOf)
-import           Data.Vector (Vector)
-import           Data.Vector.Mutable (IOVector)
-import qualified Data.Vector as V
-import           Database.PostgreSQL.Simple.Internal
+import           Control.Applicative                        (pure, (*>), (<$>),
+                                                             (<*), (<|>))
+import           Control.Concurrent.MVar                    (MVar, newMVar)
+import           Control.Exception                          (Exception)
+import qualified Data.Aeson                                 as JSON
+import qualified Data.Aeson.Parser                          as JSON (value')
+import           Data.Attoparsec.ByteString.Char8           hiding (Result)
+import           Data.ByteString                            (ByteString)
+import qualified Data.ByteString                            as SB
+import qualified Data.ByteString.Char8                      as B
+import qualified Data.ByteString.Char8                      as B8
+import qualified Data.ByteString.Lazy                       as LB
+import           Data.CaseInsensitive                       (CI)
+import qualified Data.CaseInsensitive                       as CI
+import           Data.Int                                   (Int16, Int32,
+                                                             Int64)
+import           Data.IORef                                 (IORef, newIORef)
+import           Data.Ratio                                 (Ratio)
+import           Data.Scientific                            (Scientific)
+import qualified Data.Text                                  as ST
+import qualified Data.Text.Encoding                         as ST
+import qualified Data.Text.Lazy                             as LT
+import           Data.Time                                  (Day, LocalTime,
+                                                             TimeOfDay, UTCTime,
+                                                             ZonedTime)
+import           Data.Typeable                              (Typeable, typeOf)
+import           Data.UUID.Types                            (UUID)
+import qualified Data.UUID.Types                            as UUID
+import           Data.Vector                                (Vector)
+import qualified Data.Vector                                as V
+import           Data.Vector.Mutable                        (IOVector)
+import qualified Database.PostgreSQL.LibPQ                  as PQ
+import           Database.PostgreSQL.Simple.Arrays          as Arrays
 import           Database.PostgreSQL.Simple.Compat
+import           Database.PostgreSQL.Simple.Internal
 import           Database.PostgreSQL.Simple.Ok
-import           Database.PostgreSQL.Simple.Types
-import           Database.PostgreSQL.Simple.TypeInfo as TI
-import qualified Database.PostgreSQL.Simple.TypeInfo.Static as TI
-import           Database.PostgreSQL.Simple.TypeInfo.Macro as TI
 import           Database.PostgreSQL.Simple.Time
-import           Database.PostgreSQL.Simple.Arrays as Arrays
-import qualified Database.PostgreSQL.LibPQ as PQ
-import qualified Data.ByteString as SB
-import qualified Data.ByteString.Char8 as B8
-import qualified Data.ByteString.Lazy as LB
-import qualified Data.Text as ST
-import qualified Data.Text.Encoding as ST
-import qualified Data.Text.Lazy as LT
-import           Data.CaseInsensitive (CI)
-import qualified Data.CaseInsensitive as CI
-import           Data.UUID.Types   (UUID)
-import qualified Data.UUID.Types as UUID
-import           Data.Scientific (Scientific)
-import           GHC.Real (infinity, notANumber)
+import           Database.PostgreSQL.Simple.TypeInfo        as TI
+import           Database.PostgreSQL.Simple.TypeInfo.Macro  as TI
+import qualified Database.PostgreSQL.Simple.TypeInfo.Static as TI
+import           Database.PostgreSQL.Simple.Types
+import           GHC.Real                                   (infinity,
+                                                             notANumber)
 
 -- | Exception thrown if conversion from a SQL value to a Haskell
 -- value fails.
-data ResultError = Incompatible { errSQLType :: String
+data ResultError = Incompatible { errSQLType     :: String
                                 , errSQLTableOid :: Maybe PQ.Oid
-                                , errSQLField :: String
+                                , errSQLField    :: String
                                 , errHaskellType :: String
-                                , errMessage :: String }
+                                , errMessage     :: String }
                  -- ^ The SQL and Haskell types are not compatible.
-                 | UnexpectedNull { errSQLType :: String
+                 | UnexpectedNull { errSQLType     :: String
                                   , errSQLTableOid :: Maybe PQ.Oid
-                                  , errSQLField :: String
+                                  , errSQLField    :: String
                                   , errHaskellType :: String
-                                  , errMessage :: String }
+                                  , errMessage     :: String }
                  -- ^ A SQL @NULL@ was encountered when the Haskell
                  -- type did not permit it.
-                 | ConversionFailed { errSQLType :: String
+                 | ConversionFailed { errSQLType     :: String
                                     , errSQLTableOid :: Maybe PQ.Oid
-                                    , errSQLField :: String
+                                    , errSQLField    :: String
                                     , errHaskellType :: String
-                                    , errMessage :: String }
+                                    , errMessage     :: String }
                  -- ^ The SQL value could not be parsed, or could not
                  -- be represented as a valid Haskell value, or an
                  -- unexpected low-level error occurred (e.g. mismatch
@@ -262,7 +272,7 @@ format Field{..} = unsafeDupablePerformIO (PQ.fformat result column)
 -- | void
 instance FromField () where
   fromField f _bs
-     | typeOid f /= $(inlineTypoid TI.void) = returnError Incompatible f ""
+     | typeOid f /= Oid 2278 = returnError Incompatible f ""
      | otherwise = pure ()
 
 -- | For dealing with null values.  Compatible with any postgresql type
@@ -292,7 +302,7 @@ instance FromField Null where
 -- | bool
 instance FromField Bool where
     fromField f bs
-      | typeOid f /= $(inlineTypoid TI.bool) = returnError Incompatible f ""
+      | typeOid f /= Oid 16 = returnError Incompatible f ""
       | bs == Nothing                 = returnError UnexpectedNull f ""
       | bs == Just "t"                = pure True
       | bs == Just "f"                = pure False
@@ -301,7 +311,10 @@ instance FromField Bool where
 -- | \"char\", bpchar
 instance FromField Char where
     fromField f bs =
-        if $(mkCompats [TI.char,TI.bpchar]) (typeOid f)
+        if (case typeOid f of
+              Oid 18   -> True
+              Oid 1042 -> True
+              _        -> False)
         then case bs of
                Nothing -> returnError UnexpectedNull f ""
                Just bs -> if B.length bs /= 1
@@ -339,23 +352,49 @@ instance FromField Integer where
 --   better accuracy convert to 'Scientific' or 'Rational' first)
 instance FromField Float where
     fromField = atto ok (realToFrac <$> pg_double)
-      where ok = $(mkCompats [TI.float4,TI.int2])
+      where ok (Oid x) =
+              case x of
+                700 -> True
+                21  -> True
+                _   -> False
 
 -- | int2, int4, float4, float8  (Uses attoparsec's 'double' routine,  for
 --   better accuracy convert to 'Scientific' or 'Rational' first)
 instance FromField Double where
     fromField = atto ok pg_double
-      where ok = $(mkCompats [TI.float4,TI.float8,TI.int2,TI.int4])
+      where ok (Oid x) =
+              case x of
+                700 -> True
+                701 -> True
+                21  -> True
+                23  -> True
+                _   -> False
 
 -- | int2, int4, int8, float4, float8, numeric
 instance FromField (Ratio Integer) where
     fromField = atto ok pg_rational
-      where ok = $(mkCompats [TI.float4,TI.float8,TI.int2,TI.int4,TI.int8,TI.numeric])
+      where ok (Oid x) =
+              case x of
+                700  -> True
+                701  -> True
+                21   -> True
+                23   -> True
+                20   -> True
+                1700 -> True
+                _    -> False
 
 -- | int2, int4, int8, float4, float8, numeric
 instance FromField Scientific where
      fromField = atto ok rational
-      where ok = $(mkCompats [TI.float4,TI.float8,TI.int2,TI.int4,TI.int8,TI.numeric])
+      where ok (Oid x) =
+              case x of
+                700  -> True
+                701  -> True
+                21   -> True
+                23   -> True
+                20   -> True
+                1700 -> True
+                _    -> False
 
 unBinary :: Binary t -> t
 unBinary (Binary x) = x
@@ -376,13 +415,13 @@ pg_rational
 
 -- | bytea, name, text, \"char\", bpchar, varchar, unknown
 instance FromField SB.ByteString where
-    fromField f dat = if typeOid f == $(inlineTypoid TI.bytea)
+    fromField f dat = if typeOid f == Oid 17
                       then unBinary <$> fromField f dat
                       else doFromField f okText' pure dat
 
 -- | oid
 instance FromField PQ.Oid where
-    fromField f dat = PQ.Oid <$> atto (== $(inlineTypoid TI.oid)) decimal f dat
+    fromField f dat = PQ.Oid <$> atto (== Oid 26) decimal f dat
 
 -- | bytea, name, text, \"char\", bpchar, varchar, unknown
 instance FromField LB.ByteString where
@@ -441,39 +480,39 @@ instance FromField [Char] where
 
 -- | timestamptz
 instance FromField UTCTime where
-  fromField = ff $(inlineTypoid TI.timestamptz) "UTCTime" parseUTCTime
+  fromField = ff (Oid 1184) "UTCTime" parseUTCTime
 
 -- | timestamptz
 instance FromField ZonedTime where
-  fromField = ff $(inlineTypoid TI.timestamptz) "ZonedTime" parseZonedTime
+  fromField = ff (Oid 1184) "ZonedTime" parseZonedTime
 
 -- | timestamp
 instance FromField LocalTime where
-  fromField = ff $(inlineTypoid TI.timestamp) "LocalTime" parseLocalTime
+  fromField = ff (Oid 1114) "LocalTime" parseLocalTime
 
 -- | date
 instance FromField Day where
-  fromField = ff $(inlineTypoid TI.date) "Day" parseDay
+  fromField = ff (Oid 1082) "Day" parseDay
 
 -- | time
 instance FromField TimeOfDay where
-  fromField = ff $(inlineTypoid TI.time) "TimeOfDay" parseTimeOfDay
+  fromField = ff (Oid 1083) "TimeOfDay" parseTimeOfDay
 
 -- | timestamptz
 instance FromField UTCTimestamp where
-  fromField = ff $(inlineTypoid TI.timestamptz) "UTCTimestamp" parseUTCTimestamp
+  fromField = ff (Oid 1184) "UTCTimestamp" parseUTCTimestamp
 
 -- | timestamptz
 instance FromField ZonedTimestamp where
-  fromField = ff $(inlineTypoid TI.timestamptz) "ZonedTimestamp" parseZonedTimestamp
+  fromField = ff (Oid 1184) "ZonedTimestamp" parseZonedTimestamp
 
 -- | timestamp
 instance FromField LocalTimestamp where
-  fromField = ff $(inlineTypoid TI.timestamp) "LocalTimestamp" parseLocalTimestamp
+  fromField = ff (Oid 1114) "LocalTimestamp" parseLocalTimestamp
 
 -- | date
 instance FromField Date where
-  fromField = ff $(inlineTypoid TI.date) "Date" parseDate
+  fromField = ff (Oid 1082) "Date" parseDate
 
 ff :: PQ.Oid -> String -> (B8.ByteString -> Either String a)
    -> Field -> Maybe B8.ByteString -> Conversion a
@@ -483,7 +522,7 @@ ff compatOid hsType parse f mstr =
   else case mstr of
          Nothing -> err UnexpectedNull ""
          Just str -> case parse str of
-                       Left msg -> err ConversionFailed msg
+                       Left msg  -> err ConversionFailed msg
                        Right val -> return val
  where
    err errC msg = do
@@ -541,19 +580,19 @@ instance (FromField a, Typeable a) => FromField (IOVector a) where
 -- | uuid
 instance FromField UUID where
     fromField f mbs =
-      if typeOid f /= $(inlineTypoid TI.uuid)
+      if typeOid f /= Oid 2950
       then returnError Incompatible f ""
       else case mbs of
              Nothing -> returnError UnexpectedNull f ""
              Just bs ->
                  case UUID.fromASCIIBytes bs of
-                   Nothing -> returnError ConversionFailed f "Invalid UUID"
+                   Nothing   -> returnError ConversionFailed f "Invalid UUID"
                    Just uuid -> pure uuid
 
 -- | json
 instance FromField JSON.Value where
     fromField f mbs =
-      if typeOid f /= $(inlineTypoid TI.json) && typeOid f /= $(inlineTypoid TI.jsonb)
+      if typeOid f /= Oid 114 && typeOid f /= Oid 3802
       then returnError Incompatible f ""
       else case mbs of
              Nothing -> returnError UnexpectedNull f ""
@@ -604,14 +643,36 @@ instance FromField a => FromField (MVar a) where
 type Compat = PQ.Oid -> Bool
 
 okText, okText', okBinary, ok16, ok32, ok64, okInt :: Compat
-okText   = $( mkCompats [ TI.name, TI.text, TI.char,
-                          TI.bpchar, TI.varchar ] )
-okText'  = $( mkCompats [ TI.name, TI.text, TI.char,
-                          TI.bpchar, TI.varchar, TI.unknown ] )
-okBinary = (== $( inlineTypoid TI.bytea ))
-ok16 = (== $( inlineTypoid TI.int2 ))
-ok32 = $( mkCompats [TI.int2,TI.int4] )
-ok64 = $( mkCompats [TI.int2,TI.int4,TI.int8] )
+okText (Oid x) =
+  case x of
+    19   -> True
+    25   -> True
+    18   -> True
+    1042 -> True
+    1043 -> True
+    _    -> False
+okText' (Oid x) =
+  case x of
+      19   -> True
+      25   -> True
+      18   -> True
+      1042 -> True
+      1043 -> True
+      705  -> True
+      _    -> False
+okBinary = (== Oid 17)
+ok16 = (== Oid 21)
+ok32 (Oid x) =
+  case x of
+    21 -> True
+    23 -> True
+    _  -> False
+ok64 (Oid x) =
+  case x of
+    21 -> True
+    23 -> True
+    20 -> True
+    _  -> False
 #if WORD_SIZE_IN_BITS < 64
 okInt = ok32
 #else
